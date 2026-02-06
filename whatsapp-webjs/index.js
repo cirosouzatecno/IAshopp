@@ -18,6 +18,14 @@ let lastQr = null;
 let lastQrImage = null;
 let status = 'starting';
 let lastError = null;
+let lastErrorAt = null;
+
+function recordError(err, nextStatus = 'error') {
+  if (!err) return;
+  lastError = err.message || String(err);
+  lastErrorAt = new Date().toISOString();
+  status = nextStatus;
+}
 
 const client = new Client({
   authStrategy: new LocalAuth({
@@ -35,28 +43,34 @@ client.on('qr', async (qr) => {
   try {
     lastQrImage = await qrcode.toDataURL(qr);
   } catch (err) {
-    lastError = err.message;
+    recordError(err);
   }
 });
 
 client.on('authenticated', () => {
   status = 'authenticated';
+  lastError = null;
+  lastErrorAt = null;
 });
 
 client.on('ready', () => {
   status = 'ready';
   lastQr = null;
   lastQrImage = null;
+  lastError = null;
+  lastErrorAt = null;
 });
 
 client.on('auth_failure', (msg) => {
   status = 'auth_failure';
   lastError = msg;
+  lastErrorAt = new Date().toISOString();
 });
 
 client.on('disconnected', (reason) => {
   status = 'disconnected';
   lastError = reason;
+  lastErrorAt = new Date().toISOString();
 });
 
 client.on('message', async (message) => {
@@ -82,14 +96,33 @@ client.on('message', async (message) => {
       headers: WEBHOOK_TOKEN ? { 'X-Webhook-Token': WEBHOOK_TOKEN } : undefined,
     });
   } catch (err) {
-    lastError = err.message;
+    recordError(err);
   }
+});
+
+app.get('/', (req, res) => {
+  res.json({
+    service: 'WhatsApp Web.js API',
+    version: '1.0.0',
+    status,
+    endpoints: {
+      status: 'GET /status - Check connection status',
+      qr: 'GET /qr - Get QR code for authentication',
+      send: 'POST /send - Send text message',
+      sendImage: 'POST /send-image - Send image message',
+    },
+    docs: {
+      send: { to: 'phone_number', text: 'message' },
+      sendImage: { to: 'phone_number', image_url: 'url', caption: 'optional' },
+    },
+  });
 });
 
 app.get('/status', (req, res) => {
   res.json({
     status,
     lastError,
+    lastErrorAt,
   });
 });
 
@@ -112,7 +145,7 @@ app.post('/send', async (req, res) => {
     const msg = await client.sendMessage(chatId, text);
     return res.json({ ok: true, message_id: msg.id?.id });
   } catch (err) {
-    lastError = err.message;
+    recordError(err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -129,7 +162,7 @@ app.post('/send-image', async (req, res) => {
     const msg = await client.sendMessage(chatId, media, { caption: caption || undefined });
     return res.json({ ok: true, message_id: msg.id?.id });
   } catch (err) {
-    lastError = err.message;
+    recordError(err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -154,7 +187,18 @@ async function fetchMedia(url) {
   return new MessageMedia(mime, data);
 }
 
-client.initialize();
+process.on('unhandledRejection', (err) => recordError(err, 'unhandled_rejection'));
+process.on('uncaughtException', (err) => recordError(err, 'uncaught_exception'));
+
+async function initClient() {
+  try {
+    await client.initialize();
+  } catch (err) {
+    recordError(err, 'init_error');
+  }
+}
+
+initClient();
 
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console

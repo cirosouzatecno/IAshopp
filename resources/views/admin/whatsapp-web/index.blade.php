@@ -17,6 +17,12 @@
                     <div id="wa-status" class="font-semibold text-gray-800">Carregando...</div>
                 </div>
 
+                <div id="wa-error-wrap" class="rounded border border-red-200 bg-red-50 p-4 hidden">
+                    <div class="text-sm text-red-700 mb-1">Erro</div>
+                    <div id="wa-error" class="text-sm text-red-800"></div>
+                    <div id="wa-error-at" class="text-xs text-red-600 mt-1 hidden"></div>
+                </div>
+
                 <div class="rounded border p-4">
                     <div class="text-sm text-gray-500 mb-2">QR Code</div>
                     <div class="flex items-center justify-center h-64 bg-gray-50 rounded">
@@ -41,12 +47,31 @@
             const statusEl = document.getElementById('wa-status');
             const qrImg = document.getElementById('wa-qr');
             const qrPlaceholder = document.getElementById('wa-qr-placeholder');
+            const errorWrap = document.getElementById('wa-error-wrap');
+            const errorText = document.getElementById('wa-error');
+            const errorAt = document.getElementById('wa-error-at');
+
+            function renderError(data) {
+                if (data && data.lastError) {
+                    errorText.textContent = data.lastError;
+                    errorWrap.classList.remove('hidden');
+                    if (data.lastErrorAt) {
+                        errorAt.textContent = `Ultimo erro: ${data.lastErrorAt}`;
+                        errorAt.classList.remove('hidden');
+                    } else {
+                        errorAt.classList.add('hidden');
+                    }
+                } else {
+                    errorWrap.classList.add('hidden');
+                }
+            }
 
             async function fetchStatus() {
                 try {
                     const res = await fetch(`${baseUrl}/status`);
                     const data = await res.json();
                     statusEl.textContent = data.status ?? 'desconhecido';
+                    renderError(data);
 
                     if (data.status === 'ready') {
                         qrImg.classList.add('hidden');
@@ -55,6 +80,7 @@
                     }
                 } catch (err) {
                     statusEl.textContent = 'offline';
+                    renderError({ lastError: 'Servico offline' });
                 }
             }
 
