@@ -38,22 +38,28 @@ const client = new Client({
 });
 
 client.on('qr', async (qr) => {
+  console.log('[QR EVENT] QR recebido, tamanho:', qr.length, 'bytes');
   lastQr = qr;
   status = 'qr';
   try {
+    console.log('[QR EVENT] Iniciando geração de QRImage via qrcode.toDataURL()...');
     lastQrImage = await qrcode.toDataURL(qr);
+    console.log('[QR EVENT] ✓ QRImage gerado com sucesso! Tamanho:', lastQrImage.length, 'bytes');
   } catch (err) {
+    console.error('[QR EVENT] ✗ Erro ao gerar QRImage:', err.message);
     recordError(err);
   }
 });
 
 client.on('authenticated', () => {
+  console.log('[AUTH] ✓ Cliente autenticado com sucesso');
   status = 'authenticated';
   lastError = null;
   lastErrorAt = null;
 });
 
 client.on('ready', () => {
+  console.log('[READY] ✓ Cliente pronto para usar!');
   status = 'ready';
   lastQr = null;
   lastQrImage = null;
@@ -62,12 +68,14 @@ client.on('ready', () => {
 });
 
 client.on('auth_failure', (msg) => {
+  console.error('[AUTH_FAIL] ✗ Falha na autenticação:', msg);
   status = 'auth_failure';
   lastError = msg;
   lastErrorAt = new Date().toISOString();
 });
 
 client.on('disconnected', (reason) => {
+  console.error('[DISCONNECT] ✗ Cliente desconectado:', reason);
   status = 'disconnected';
   lastError = reason;
   lastErrorAt = new Date().toISOString();
@@ -92,10 +100,13 @@ client.on('message', async (message) => {
       },
     };
 
-    await axios.post(LARAVEL_WEBHOOK_URL, payload, {
+    console.log('[MESSAGE] Recebida mensagem de:', cleanNumber(message.from), '-', message.body?.substring(0, 50));
+    const response = await axios.post(LARAVEL_WEBHOOK_URL, payload, {
       headers: WEBHOOK_TOKEN ? { 'X-Webhook-Token': WEBHOOK_TOKEN } : undefined,
     });
+    console.log('[MESSAGE] ✓ Mensagem enviada para webhook:', LARAVEL_WEBHOOK_URL);
   } catch (err) {
+    console.error('[MESSAGE] ✗ Erro ao processar mensagem:', err.message);
     recordError(err);
   }
 });
@@ -192,8 +203,12 @@ process.on('uncaughtException', (err) => recordError(err, 'uncaught_exception'))
 
 async function initClient() {
   try {
+    console.log('[INIT] Iniciando cliente WhatsApp Web.js...');
+    console.log('[INIT] SESSION_PATH:', process.env.SESSION_PATH || '.wwebjs_auth');
     await client.initialize();
+    console.log('[INIT] ✓ Cliente inicializado com sucesso');
   } catch (err) {
+    console.error('[INIT] ✗ Erro ao inicializar cliente:', err.message);
     recordError(err, 'init_error');
   }
 }
@@ -201,6 +216,8 @@ async function initClient() {
 initClient();
 
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`WhatsApp Web service running on port ${PORT}`);
+  console.log(`[SERVER] ✓ WhatsApp Web service rodando em http://127.0.0.1:${PORT}`);
+  console.log(`[SERVER] Endpoint /qr: http://127.0.0.1:${PORT}/qr`);
+  console.log(`[SERVER] Endpoint /status: http://127.0.0.1:${PORT}/status`);
+  console.log(`[SERVER] CORS habilitado para todas as origins`);
 });

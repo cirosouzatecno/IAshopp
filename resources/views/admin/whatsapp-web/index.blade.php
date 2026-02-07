@@ -51,6 +51,8 @@
             const errorText = document.getElementById('wa-error');
             const errorAt = document.getElementById('wa-error-at');
 
+            console.log('[WhatsApp QR] Iniciando...', { baseUrl });
+
             function renderError(data) {
                 if (data && data.lastError) {
                     errorText.textContent = data.lastError;
@@ -68,8 +70,13 @@
 
             async function fetchStatus() {
                 try {
+                    console.log('[fetchStatus] Buscando status...');
                     const res = await fetch(`${baseUrl}/status`);
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
                     const data = await res.json();
+                    console.log('[fetchStatus] Status recebido:', data);
                     statusEl.textContent = data.status ?? 'desconhecido';
                     renderError(data);
 
@@ -79,35 +86,57 @@
                         qrPlaceholder.classList.remove('hidden');
                     }
                 } catch (err) {
+                    console.error('[fetchStatus] Erro:', err);
                     statusEl.textContent = 'offline';
-                    renderError({ lastError: 'Servico offline' });
+                    renderError({ lastError: `Serviço offline: ${err.message}` });
                 }
             }
 
             async function fetchQr() {
                 try {
+                    console.log('[fetchQr] Buscando QR code...');
                     const res = await fetch(`${baseUrl}/qr`);
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}`);
+                    }
                     const data = await res.json();
+                    console.log('[fetchQr] Resposta:', {
+                        status: data.status,
+                        hasQrImage: !!data.qrImage,
+                        qrImageSize: data.qrImage ? data.qrImage.length : 0
+                    });
+
                     if (data.qrImage) {
+                        console.log('[fetchQr] ✓ Renderizando QRImage');
                         qrImg.src = data.qrImage;
                         qrImg.classList.remove('hidden');
                         qrPlaceholder.classList.add('hidden');
                     } else if (data.status === 'ready') {
+                        console.log('[fetchQr] Cliente já autenticado');
                         qrImg.classList.add('hidden');
                         qrPlaceholder.textContent = 'Conectado';
                         qrPlaceholder.classList.remove('hidden');
+                    } else {
+                        console.log('[fetchQr] QRImage ainda não disponível, status:', data.status);
                     }
                 } catch (err) {
+                    console.error('[fetchQr] Erro:', err);
                     qrImg.classList.add('hidden');
-                    qrPlaceholder.textContent = 'Serviço offline';
+                    qrPlaceholder.textContent = `Serviço offline: ${err.message}`;
                     qrPlaceholder.classList.remove('hidden');
                 }
             }
 
+            // Executar testes iniciais
+            console.log('[WhatsApp QR] Testando conectividade com', baseUrl);
             fetchStatus();
             fetchQr();
+
+            // Atualizar a cada 5 segundos
             setInterval(fetchStatus, 5000);
             setInterval(fetchQr, 5000);
+
+            console.log('[WhatsApp QR] ✓ Inicializado, atualizando a cada 5 segundos');
         })();
     </script>
 </x-app-layout>
