@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ChatbotRule;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Order;
@@ -9,13 +10,15 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\WhatsappMessage;
+use App\Services\AiService;
 use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ConversationFlow
 {
-    public function __construct(private WhatsAppService $whatsApp)
+    public function __construct(private WhatsAppService $whatsApp, private AiService $ai)
     {
     }
 
@@ -77,7 +80,9 @@ class ConversationFlow
 
         if ($type === 'interactive') {
             $reply = Arr::get($msg, 'interactive.button_reply.title')
+                ?? Arr::get($msg, 'interactive.button_reply.id')
                 ?? Arr::get($msg, 'interactive.list_reply.title');
+            $reply = $reply ?? Arr::get($msg, 'interactive.list_reply.id');
 
             return trim((string) $reply);
         }
@@ -143,6 +148,10 @@ class ConversationFlow
             return;
         }
 
+        if ($this->tryHandleChatbot($phone, $text, $normalized, $conversation, $customer)) {
+            return;
+        }
+
         switch ($conversation->state) {
             case 'welcome':
                 $this->handleWelcome($phone, $normalized, $conversation);
@@ -172,6 +181,156 @@ class ConversationFlow
                 $conversation->save();
                 break;
         }
+    }
+
+    protected function tryHandleChatbot(string $phone, string $text, string $normalized, Conversation $conversation, Customer $customer): bool
+    {
+        if (!$this->isChatbotState($conversation->state)) {
+            return false;
+        }
+
+        if ($this->handleChatbotRules($phone, $text, $normalized, $conversation, $customer)) {
+            return true;
+        }
+
+        return $this->handleAiFallback($phone, $text, $customer);
+    }
+
+    protected function isChatbotState(?string $state): bool
+    {
+        return in_array($state, ['welcome', 'order_created'], true);
+    }
+
+    protected function handleChatbotRules(string $phone, string $text, string $normalized, Conversation $conversation, Customer $customer): bool
+    {
+        $rules = ChatbotRule::query()
+            ->active()
+            ->orderByDesc('priority')
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($rules as $rule) {
+            if (!$rule->appliesToState($conversation->state)) {
+                continue;
+            }
+            if (!$rule->matches($normalized)) {
+                continue;
+            }
+
+            $this->dispatchChatbotRule($rule, $phone, $text, $conversation, $customer);
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function dispatchChatbotRule(ChatbotRule $rule, string $phone, string $text, Conversation $conversation, Customer $customer): void
+    {
+        switch ($rule->response_type) {
+            case 'text':
+                $body = $this->renderTemplateText($rule->response_text ?? '', $customer);
+                if ($body !== '') {
+                    $this->whatsApp->sendText($phone, $body);
+                }
+                return;
+            case 'template':
+                if ($rule->template) {
+                    $body = $this->renderTemplateText($rule->template->content ?? '', $customer);
+                    if ($body !== '') {
+                        $this->whatsApp->sendText($phone, $body);
+                    }
+                }
+                return;
+            case 'buttons':
+                $buttons = $rule->buttons();
+                $body = $this->renderTemplateText($rule->response_text ?? 'Escolha uma opcao:', $customer);
+                if (empty($buttons)) {
+                    $this->whatsApp->sendText($phone, $body);
+                    return;
+                }
+
+                $messageId = $this->whatsApp->sendButtons($phone, $body, $buttons);
+                if (!$messageId) {
+                    $this->whatsApp->sendText($phone, $this->buildButtonsFallback($body, $buttons));
+                }
+                return;
+            case 'menu':
+                $this->sendMenu($phone);
+                $conversation->state = 'welcome';
+                $conversation->context_json = [];
+                $conversation->save();
+                return;
+            case 'catalog':
+                $this->sendCatalog($phone);
+                $conversation->state = 'browsing_catalog';
+                $conversation->context_json = [];
+                $conversation->save();
+                return;
+            case 'status':
+                $this->sendLatestOrderStatus($phone, $customer);
+                return;
+            case 'handoff':
+                $conversation->state = 'handoff';
+                $conversation->context_json = [];
+                $conversation->save();
+                $this->whatsApp->sendText($phone, $this->handoffMessage());
+                return;
+            case 'ai':
+                $this->handleAiFallback($phone, $text, $customer, true);
+                return;
+            default:
+                return;
+        }
+    }
+
+    protected function handleAiFallback(string $phone, string $text, Customer $customer, bool $force = false): bool
+    {
+        if (!$force && !$this->ai->isEnabled()) {
+            return false;
+        }
+
+        $reply = $this->ai->generateReply($text, $customer);
+        if ($reply) {
+            $this->whatsApp->sendText($phone, $reply);
+            return true;
+        }
+
+        $fallback = Setting::getValue('ai_fallback_message');
+        if ($fallback) {
+            $this->whatsApp->sendText($phone, $fallback);
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function renderTemplateText(string $text, Customer $customer): string
+    {
+        $name = $customer->name ?: 'cliente';
+        $firstName = Str::before($name, ' ');
+
+        return strtr($text, [
+            '{name}' => $name,
+            '{nome}' => $name,
+            '{first_name}' => $firstName,
+            '{primeiro_nome}' => $firstName,
+            '{phone}' => $customer->phone,
+        ]);
+    }
+
+    protected function buildButtonsFallback(string $body, array $buttons): string
+    {
+        $lines = [$body];
+        $index = 1;
+        foreach ($buttons as $button) {
+            $title = $button['title'] ?? $button['body'] ?? '';
+            if ($title !== '') {
+                $lines[] = "{$index}) {$title}";
+                $index++;
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     protected function handleWelcome(string $phone, string $normalized, Conversation $conversation): void
@@ -268,9 +427,16 @@ class ConversationFlow
         $summary = "Resumo do pedido:\n";
         $summary .= "{$product->name} x{$qty}\n";
         $summary .= "Total: R$ " . number_format($total, 2, ',', '.');
-        $summary .= "\n\n1) Confirmar\n2) Cancelar";
 
-        $this->whatsApp->sendText($phone, $summary);
+        $buttons = [
+            ['id' => 'confirmar', 'title' => 'Confirmar'],
+            ['id' => 'cancelar', 'title' => 'Cancelar'],
+        ];
+
+        $messageId = $this->whatsApp->sendButtons($phone, $summary, $buttons);
+        if (!$messageId) {
+            $this->whatsApp->sendText($phone, $summary . "\n\n1) Confirmar\n2) Cancelar");
+        }
     }
 
     protected function handleConfirmOrder(string $phone, string $normalized, Conversation $conversation, Customer $customer): void
@@ -278,7 +444,14 @@ class ConversationFlow
         if (in_array($normalized, ['1', 'sim', 'confirmar'], true)) {
             $conversation->state = 'delivery_choice';
             $conversation->save();
-            $this->whatsApp->sendText($phone, "Entrega ou retirada?\n1) Entrega\n2) Retirada");
+            $buttons = [
+                ['id' => 'entrega', 'title' => 'Entrega'],
+                ['id' => 'retirada', 'title' => 'Retirada'],
+            ];
+            $messageId = $this->whatsApp->sendButtons($phone, 'Entrega ou retirada?', $buttons);
+            if (!$messageId) {
+                $this->whatsApp->sendText($phone, "Entrega ou retirada?\n1) Entrega\n2) Retirada");
+            }
             return;
         }
 
@@ -417,12 +590,24 @@ class ConversationFlow
 
     protected function sendMenu(string $phone): void
     {
-        $message = "Olá! Como posso ajudar?\n";
-        $message .= "1) Ver catálogo\n";
-        $message .= "2) Ver pedido/status\n";
-        $message .= "3) Falar com atendente";
+        $message = "Ola! Como posso ajudar?";
+        $buttons = [
+            ['id' => 'catalogo', 'title' => 'Catalogo'],
+            ['id' => 'status', 'title' => 'Status'],
+            ['id' => 'atendente', 'title' => 'Atendente'],
+        ];
 
-        $this->whatsApp->sendText($phone, $message);
+        $messageId = $this->whatsApp->sendButtons($phone, $message, $buttons);
+        if (!$messageId) {
+            $fallback = "Ola! Como posso ajudar?
+";
+            $fallback .= "1) Ver catalogo
+";
+            $fallback .= "2) Ver pedido/status
+";
+            $fallback .= "3) Falar com atendente";
+            $this->whatsApp->sendText($phone, $fallback);
+        }
     }
 
     protected function sendCatalog(string $phone): void

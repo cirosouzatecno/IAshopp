@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            <h2 class="font-semibold text-xl text-gray-800 dark:text-slate-100 leading-tight">
                 Produtos
             </h2>
             <a href="{{ route('admin.products.create') }}" class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
@@ -12,7 +12,7 @@
 
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 @include('admin.partials.flash')
 
                 <div class="overflow-x-auto">
@@ -46,7 +46,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="py-4 text-center text-gray-500">Nenhum produto cadastrado.</td>
+                                    <td colspan="6" class="py-4 text-center text-gray-500 dark:text-slate-300">Nenhum produto cadastrado.</td>
                                 </tr>
                             @endforelse
                         </tbody>

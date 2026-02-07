@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const qrcode = require('qrcode');
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia, Buttons } = require('whatsapp-web.js');
 
 const app = express();
 app.use(cors());
@@ -88,8 +88,12 @@ client.on('message', async (message) => {
 
   try {
     const contact = await message.getContact();
+    const fromValue = message.from?.endsWith('@c.us')
+      ? cleanNumber(message.from)
+      : message.from;
+
     const payload = {
-      from: cleanNumber(message.from),
+      from: fromValue,
       text: message.body || '',
       name: contact?.pushname || contact?.name || null,
       raw: {
@@ -121,10 +125,12 @@ app.get('/', (req, res) => {
       qr: 'GET /qr - Get QR code for authentication',
       send: 'POST /send - Send text message',
       sendImage: 'POST /send-image - Send image message',
+      sendButtons: 'POST /send-buttons - Send buttons message',
     },
     docs: {
       send: { to: 'phone_number', text: 'message' },
       sendImage: { to: 'phone_number', image_url: 'url', caption: 'optional' },
+      sendButtons: { to: 'phone_number', body: 'message', buttons: '[{id,title}]' },
     },
   });
 });
@@ -178,9 +184,37 @@ app.post('/send-image', async (req, res) => {
   }
 });
 
+app.post('/send-buttons', async (req, res) => {
+  const { to, body, buttons, title, footer } = req.body || {};
+  if (!to || !body || !Array.isArray(buttons) || buttons.length === 0) {
+    return res.status(422).json({ error: 'to, body and buttons are required' });
+  }
+
+  try {
+    const formatted = buttons
+      .map((btn) => ({
+        id: btn.id,
+        body: btn.title || btn.body || btn.label || '',
+      }))
+      .filter((btn) => btn.body !== '')
+      .slice(0, 3);
+
+    if (!formatted.length) {
+      return res.status(422).json({ error: 'buttons are empty' });
+    }
+
+    const message = new Buttons(body, formatted, title, footer);
+    const msg = await client.sendMessage(normalizeNumber(to), message);
+    return res.json({ ok: true, message_id: msg.id?.id });
+  } catch (err) {
+    recordError(err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 function normalizeNumber(number) {
   if (!number) return number;
-  if (number.includes('@c.us')) {
+  if (number.includes('@')) {
     return number;
   }
   return `${number}@c.us`;
@@ -188,7 +222,7 @@ function normalizeNumber(number) {
 
 function cleanNumber(number) {
   if (!number) return number;
-  return number.replace('@c.us', '');
+  return number.replace('@c.us', '').replace('@lid', '');
 }
 
 async function fetchMedia(url) {

@@ -1,13 +1,13 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+        <h2 class="font-semibold text-xl text-gray-800 dark:text-slate-100 leading-tight">
             Configurações
         </h2>
     </x-slot>
 
     <div class="py-6">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 @include('admin.partials.flash')
 
                 <form method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="space-y-8">
@@ -37,7 +37,7 @@
                             </div>
 
                             <div class="border-t pt-4">
-                                <div class="text-sm text-gray-500">Meta Cloud API (oficial)</div>
+                                <div class="text-sm text-gray-500 dark:text-slate-300">Meta Cloud API (oficial)</div>
                             </div>
 
                             <div>
@@ -68,6 +68,56 @@
                             <div>
                                 <x-input-label for="handoff_message" value="Mensagem de Handoff" />
                                 <textarea id="handoff_message" name="handoff_message" class="mt-1 block w-full rounded-md border-gray-300" rows="2">{{ old('handoff_message', $settings['handoff_message'] ?? '') }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="font-semibold text-lg mb-4">Chatbot e IA</h3>
+
+                        <div class="space-y-4">
+                            <div>
+                                <x-input-label for="ai_enabled" value="IA habilitada" />
+                                <select id="ai_enabled" name="ai_enabled" class="mt-1 block w-full rounded-md border-gray-300">
+                                    @php $aiEnabled = old('ai_enabled', $settings['ai_enabled'] ?? '0'); @endphp
+                                    <option value="1" {{ $aiEnabled === '1' ? 'selected' : '' }}>Sim</option>
+                                    <option value="0" {{ $aiEnabled !== '1' ? 'selected' : '' }}>Nao</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <x-input-label for="ai_provider" value="Provider" />
+                                <x-text-input id="ai_provider" name="ai_provider" type="text" class="mt-1 block w-full" value="{{ old('ai_provider', $settings['ai_provider'] ?? 'openai') }}" />
+                            </div>
+
+                            <div>
+                                <x-input-label for="ai_api_key" value="API Key" />
+                                <x-text-input id="ai_api_key" name="ai_api_key" type="text" class="mt-1 block w-full" value="{{ old('ai_api_key', $settings['ai_api_key'] ?? '') }}" />
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <x-input-label for="ai_model" value="Modelo" />
+                                    <x-text-input id="ai_model" name="ai_model" type="text" class="mt-1 block w-full" value="{{ old('ai_model', $settings['ai_model'] ?? 'gpt-4o-mini') }}" />
+                                </div>
+                                <div>
+                                    <x-input-label for="ai_temperature" value="Temperatura" />
+                                    <x-text-input id="ai_temperature" name="ai_temperature" type="number" step="0.1" class="mt-1 block w-full" value="{{ old('ai_temperature', $settings['ai_temperature'] ?? '0.4') }}" />
+                                </div>
+                                <div>
+                                    <x-input-label for="ai_max_tokens" value="Max tokens" />
+                                    <x-text-input id="ai_max_tokens" name="ai_max_tokens" type="number" class="mt-1 block w-full" value="{{ old('ai_max_tokens', $settings['ai_max_tokens'] ?? '300') }}" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <x-input-label for="ai_system_prompt" value="System prompt" />
+                                <textarea id="ai_system_prompt" name="ai_system_prompt" class="mt-1 block w-full rounded-md border-gray-300" rows="4">{{ old('ai_system_prompt', $settings['ai_system_prompt'] ?? '') }}</textarea>
+                            </div>
+
+                            <div>
+                                <x-input-label for="ai_fallback_message" value="Mensagem fallback" />
+                                <textarea id="ai_fallback_message" name="ai_fallback_message" class="mt-1 block w-full rounded-md border-gray-300" rows="2">{{ old('ai_fallback_message', $settings['ai_fallback_message'] ?? '') }}</textarea>
                             </div>
                         </div>
                     </div>

@@ -1,29 +1,29 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+        <h2 class="font-semibold text-xl text-gray-800 dark:text-slate-100 leading-tight">
             Pedido #{{ $order->id }}
         </h2>
     </x-slot>
 
     <div class="py-6">
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 @include('admin.partials.flash')
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div>
-                        <div class="text-gray-500">Cliente</div>
+                        <div class="text-gray-500 dark:text-slate-300">Cliente</div>
                         <div class="font-semibold">{{ $order->customer?->name ?? '—' }}</div>
                         <div class="text-gray-600">{{ $order->customer?->phone }}</div>
                     </div>
                     <div>
-                        <div class="text-gray-500">Total</div>
+                        <div class="text-gray-500 dark:text-slate-300">Total</div>
                         <div class="font-semibold">R$ {{ number_format($order->total, 2, ',', '.') }}</div>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <h3 class="font-semibold mb-4">Itens</h3>
                 <ul class="text-sm space-y-2">
                     @foreach ($order->items as $item)
@@ -35,7 +35,7 @@
                 </ul>
             </div>
 
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 <h3 class="font-semibold mb-4">Atualizar Pedido</h3>
                 <form method="POST" action="{{ route('admin.orders.update', $order) }}" class="space-y-4">
                     @csrf

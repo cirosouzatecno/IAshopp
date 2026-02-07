@@ -36,7 +36,7 @@ class WhatsAppService
             return $this->sendViaWebJs($to, [
                 'image_url' => $imageUrl,
                 'caption' => $caption,
-            ], true);
+            ], '/send-image');
         }
 
         $payload = [
@@ -55,6 +55,64 @@ class WhatsAppService
         return $this->sendPayload($to, $payload);
     }
 
+    public function sendButtons(string $to, string $body, array $buttons, ?string $title = null, ?string $footer = null): ?string
+    {
+        $buttons = array_values(array_slice($buttons, 0, 3));
+
+        if (empty($buttons)) {
+            return $this->sendText($to, $body);
+        }
+
+        if ($this->useWebJs()) {
+            return $this->sendViaWebJs($to, [
+                'body' => $body,
+                'buttons' => $buttons,
+                'title' => $title,
+                'footer' => $footer,
+            ], '/send-buttons');
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'to' => $to,
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'button',
+                'body' => [
+                    'text' => $body,
+                ],
+                'action' => [
+                    'buttons' => array_map(function (array $button) {
+                        $id = $button['id'] ?? ($button['title'] ?? 'btn');
+                        $title = $button['title'] ?? $button['body'] ?? 'Opcao';
+                        return [
+                            'type' => 'reply',
+                            'reply' => [
+                                'id' => (string) $id,
+                                'title' => (string) $title,
+                            ],
+                        ];
+                    }, $buttons),
+                ],
+            ],
+        ];
+
+        if ($title) {
+            $payload['interactive']['header'] = [
+                'type' => 'text',
+                'text' => $title,
+            ];
+        }
+
+        if ($footer) {
+            $payload['interactive']['footer'] = [
+                'text' => $footer,
+            ];
+        }
+
+        return $this->sendPayload($to, $payload);
+    }
+
     protected function useWebJs(): bool
     {
         $provider = Setting::getValue('whatsapp_provider', env('WHATSAPP_PROVIDER', 'meta'));
@@ -62,7 +120,7 @@ class WhatsAppService
         return $provider === 'webjs';
     }
 
-    protected function sendViaWebJs(string $to, array $data, bool $isImage = false): ?string
+    protected function sendViaWebJs(string $to, array $data, string $path = '/send'): ?string
     {
         $baseUrl = Setting::getValue('whatsapp_webjs_base_url', env('WHATSAPP_WEBJS_BASE_URL', 'http://127.0.0.1:3001'));
         if (!$baseUrl) {
@@ -70,7 +128,7 @@ class WhatsAppService
             return null;
         }
 
-        $endpoint = rtrim($baseUrl, '/') . ($isImage ? '/send-image' : '/send');
+        $endpoint = rtrim($baseUrl, '/') . $path;
         $payload = array_merge([
             'to' => $to,
         ], $data);

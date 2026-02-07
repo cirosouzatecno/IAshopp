@@ -1,13 +1,13 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+        <h2 class="font-semibold text-xl text-gray-800 dark:text-slate-100 leading-tight">
             Pedidos
         </h2>
     </x-slot>
 
     <div class="py-6">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <div class="bg-white dark:bg-slate-800 overflow-hidden shadow-sm sm:rounded-lg p-6">
                 @include('admin.partials.flash')
 
                 <div class="overflow-x-auto">
@@ -38,7 +38,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="py-4 text-center text-gray-500">Nenhum pedido encontrado.</td>
+                                    <td colspan="7" class="py-4 text-center text-gray-500 dark:text-slate-300">Nenhum pedido encontrado.</td>
                                 </tr>
                             @endforelse
                         </tbody>
